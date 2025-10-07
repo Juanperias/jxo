@@ -3,8 +3,11 @@
 #![feature(sync_unsafe_cell)]
 
 mod requests;
-use core::fmt::Write;
 mod fb;
+mod structures;
+
+use core::fmt::Write;
+
 
 use core::panic::PanicInfo;
 
