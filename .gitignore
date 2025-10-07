@@ -1,0 +1,5 @@
+/target
+limine/
+kernel
+kernel.sym
+ovmf
