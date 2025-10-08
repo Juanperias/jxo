@@ -1,9 +1,14 @@
 use core::cell::SyncUnsafeCell;
 
 use limine::framebuffer::{Framebuffer, MemoryModel};
-use noto_sans_mono_bitmap::{get_raster, RasterizedChar};
+use noto_sans_mono_bitmap::{RasterizedChar, get_raster};
 
-use crate::{fb::font_data::{BACKUP_CHAR, BORDER_PADDING, CHAR_RASTER_HEIGHT, LETTER_SPACING, LINE_SPACING}, requests::FRAMEBUFFER};
+use crate::{
+    fb::font_data::{
+        BACKUP_CHAR, BORDER_PADDING, CHAR_RASTER_HEIGHT, LETTER_SPACING, LINE_SPACING,
+    },
+    requests::FRAMEBUFFER,
+};
 
 pub static PRIMITIVE_WRITER: SyncUnsafeCell<Option<PrimitiveFbWriter>> = SyncUnsafeCell::new(None);
 
@@ -22,7 +27,7 @@ pub fn get_fb_writer() -> &'static mut PrimitiveFbWriter {
 }
 
 mod font_data {
-    use noto_sans_mono_bitmap::{get_raster_width, FontWeight, RasterHeight};
+    use noto_sans_mono_bitmap::{FontWeight, RasterHeight, get_raster_width};
 
     pub const LINE_SPACING: usize = 2;
 
@@ -41,11 +46,7 @@ mod font_data {
 
 fn get_char_raster(c: char) -> RasterizedChar {
     fn get(c: char) -> Option<RasterizedChar> {
-        get_raster(
-            c,
-            font_data::FONT_WEIGHT,
-            font_data::CHAR_RASTER_HEIGHT,
-        )
+        get_raster(c, font_data::FONT_WEIGHT, font_data::CHAR_RASTER_HEIGHT)
     }
     get(c).unwrap_or_else(|| get(BACKUP_CHAR).expect("Should get raster of backup char."))
 }
@@ -58,11 +59,7 @@ pub struct PrimitiveFbWriter {
 
 impl PrimitiveFbWriter {
     pub fn new(fb: Framebuffer<'static>) -> Self {
-        Self {
-            fb,
-            x: 0,
-            y: 0,
-        }
+        Self { fb, x: 0, y: 0 }
     }
     pub fn width(&self) -> u64 {
         self.fb.width()
@@ -102,6 +99,9 @@ impl PrimitiveFbWriter {
         self.x = BORDER_PADDING;
     }
     pub fn clear(&mut self) {
+        self.x = 0;
+        self.y = 0;
+
         unsafe {
             core::ptr::write_bytes(self.fb.addr(), 0x0, (self.width() * self.height()) as usize);
         }
@@ -110,9 +110,9 @@ impl PrimitiveFbWriter {
 
 impl core::fmt::Write for PrimitiveFbWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-       for c in s.chars() {
+        for c in s.chars() {
             self.write_char(c)?;
-       }
+        }
 
         Ok(())
     }
@@ -122,19 +122,17 @@ impl core::fmt::Write for PrimitiveFbWriter {
             '\r' => self.carriage_return(),
             c => {
                 let new_xpos = self.x + font_data::CHAR_RASTER_WIDTH;
-                
+
                 if new_xpos >= self.width() as usize {
                     self.newline();
                 }
-                let new_ypos =
-                    self.y + font_data::CHAR_RASTER_HEIGHT.val() + BORDER_PADDING;
+                let new_ypos = self.y + font_data::CHAR_RASTER_HEIGHT.val() + BORDER_PADDING;
                 if new_ypos >= self.height() as usize {
                     self.clear();
                 }
-                self.write_rendered_char(&get_char_raster(c)); 
+                self.write_rendered_char(&get_char_raster(c));
             }
         };
-    
 
         Ok(())
     }
@@ -146,7 +144,7 @@ macro_rules! print {
         let fb = $crate::fb::get_fb_writer();
 
         fb.write_fmt(format_args!($($arg)*)).unwrap();
-    } 
+    }
 }
 
 #[macro_export]
