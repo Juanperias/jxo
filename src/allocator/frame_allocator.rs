@@ -4,7 +4,7 @@ use crate::{allocator::HHDM, println, requests, structures::{linked_list::{Align
 
 pub static FRAME_ALLOCATOR: Once<FrameAllocator> = Once::new();
 
-
+// use only last
 pub struct FrameAllocator {
     pub linked_list: Option<LinkedList>, 
 }
@@ -64,6 +64,14 @@ pub fn init_frame_allocator() -> FrameAllocator {
     unsafe {
         let last = &(*(node).prev.load(Ordering::SeqCst));
    
+        let ptr = node.value.load(Ordering::SeqCst) as *mut AlignedNode;
+
+        (*ptr) = AlignedNode {
+                    value: AtomicU64::new(node.value.load(Ordering::SeqCst)),
+                    next: AtomicPtr::new(node.next.load(Ordering::SeqCst)),
+                    prev: AtomicPtr::new(core::ptr::null_mut()),
+        };
+
         return FrameAllocator {
             linked_list: Some(LinkedList {
                 start: Some(AlignedNode {
