@@ -12,7 +12,7 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
-use crate::allocator::frame_allocator::init_frame_allocator;
+use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
 use crate::allocator::HHDM;
 use crate::fb::init_writer;
 use crate::structures::linked_list::AlignedNode;
@@ -24,24 +24,23 @@ extern "C" fn kmain() -> ! {
     init_writer();
     init_frame_allocator();
     
-    let mut node = structures::linked_list::AlignedNode {
-        value: AtomicU64::new(0),
-        next: AtomicPtr::new(core::ptr::null_mut()),
-        prev: AtomicPtr::new(core::ptr::null_mut()),
-    };
 
 
-
-    let mut current = (&mut node) as *const AlignedNode; 
+    let frame = get_frame_allocator();
     
-    while current != core::ptr::null() {
-       unsafe {
-            println!("{:?}", (*current));
+    unsafe {
+        let page1 = frame.alloc_page();
+        let page2 = frame.alloc_page();
 
+        println!("Page 1 at {}", page1);
+        println!("Page 2 at {}", page2);
 
+        frame.dealloc_page(page2 as *mut ());
+        println!("page 2 deallocated");
 
-           current = (*current).next.load(Ordering::Relaxed);
-       }
+        let page3 = frame.alloc_page();
+        
+        println!("Page 3 at {}", page3);
     }
 
 

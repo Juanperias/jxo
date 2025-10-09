@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 limine = "0.5.0"
 noto-sans-mono-bitmap = { version = "0.3.1", features = ["unicode-specials"] }
+x86_64 = { version = "0.15.2", features = ["abi_x86_interrupt", "instructions", "asm_const", "const_fn"] }

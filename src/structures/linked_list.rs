@@ -19,6 +19,6 @@ impl AlignedNode {
 
 #[derive(Debug)]
 pub struct LinkedList {
-    pub start: Option<AlignedNode>,
-    pub end: Option<AlignedNode>,
+    pub start: *mut AlignedNode,
+    pub end: *mut AlignedNode,
 }

@@ -1,19 +1,60 @@
-use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
+use core::{cell::SyncUnsafeCell, sync::atomic::{AtomicPtr, AtomicU64, Ordering}};
+use core::fmt::Write;
+use x86_64::structures::paging::PageSize;
 
-use crate::{allocator::HHDM, println, requests, structures::{linked_list::{AlignedNode, LinkedList}, once::Once}};
+use crate::{allocator::HHDM, println, requests, structures::{linked_list::{self, AlignedNode, LinkedList}, once::Once}};
 
-pub static FRAME_ALLOCATOR: Once<FrameAllocator> = Once::new();
+pub static FRAME_ALLOCATOR: SyncUnsafeCell<Option<FrameAllocator>> = SyncUnsafeCell::new(None);
 
 // use only last
 pub struct FrameAllocator {
-    pub linked_list: Option<LinkedList>, 
+    pub linked_list: LinkedList, 
 }
 
 impl FrameAllocator {
+    pub unsafe fn alloc_page(&mut self) -> u64 {
+        unsafe {
+            let end = self.linked_list.end;
+
+            let value = (*end).value.load(Ordering::SeqCst);
+            
+            let prev = (*end).prev.load(Ordering::SeqCst);
+            
+            (*prev).next = AtomicPtr::new(core::ptr::null_mut());
+
+            core::ptr::write_bytes(value as *mut u8, 0_u8, 4096);
+            
+
+            self.linked_list.end = prev;
+
+
+            value
+        }
+    }
+    pub unsafe fn dealloc_page(&mut self, page: *mut ()) {
+        unsafe {
+        let ptr = page as *mut AlignedNode;
+
+        let node = AlignedNode {
+            value: AtomicU64::new(ptr as u64),
+            next: AtomicPtr::new(core::ptr::null_mut()),
+                prev: AtomicPtr::new(self.linked_list.end),
+            };
+
+            (*ptr) = node;
+
+            (*self.linked_list.end).next = AtomicPtr::new(ptr);
+            self.linked_list.end = ptr;
+        }
+    } 
 }
 
+unsafe impl Sync for FrameAllocator {}
 
-pub fn init_frame_allocator() -> FrameAllocator {
+unsafe impl Send for FrameAllocator {}
+
+
+pub fn init_frame_allocator() {
     let mut node = AlignedNode::empty();
 
     let mut first = true;
@@ -45,7 +86,7 @@ pub fn init_frame_allocator() -> FrameAllocator {
                 }
 
                 let tmp_node = AlignedNode {
-                    value: AtomicU64::new(i - *HHDM),
+                    value: AtomicU64::new(i),
                     next: AtomicPtr::new(core::ptr::null_mut()),
                     prev: AtomicPtr::new(current),
                 };
@@ -61,10 +102,8 @@ pub fn init_frame_allocator() -> FrameAllocator {
         }
     }
 
-    unsafe {
-        let last = &(*(node).prev.load(Ordering::SeqCst));
-   
-        let ptr = node.value.load(Ordering::SeqCst) as *mut AlignedNode;
+    unsafe {  
+        let ptr = (node.value.load(Ordering::SeqCst)) as *mut AlignedNode;
 
         (*ptr) = AlignedNode {
                     value: AtomicU64::new(node.value.load(Ordering::SeqCst)),
@@ -72,20 +111,16 @@ pub fn init_frame_allocator() -> FrameAllocator {
                     prev: AtomicPtr::new(core::ptr::null_mut()),
         };
 
-        return FrameAllocator {
-            linked_list: Some(LinkedList {
-                start: Some(AlignedNode {
-                    value: AtomicU64::new(node.value.load(Ordering::SeqCst)),
-                    next: AtomicPtr::new(node.next.load(Ordering::SeqCst)),
-                    prev: AtomicPtr::new(core::ptr::null_mut()),
-                }),
-                end: Some(AlignedNode {
-                    value: AtomicU64::new(last.value.load(Ordering::SeqCst)),
-                    next: AtomicPtr::new(last.next.load(Ordering::SeqCst)),
-                    prev: AtomicPtr::new(last.prev.load(Ordering::SeqCst)),
-                }),
-            })
-        };
+        *FRAME_ALLOCATOR.get() = Some(FrameAllocator {
+            linked_list: LinkedList {
+                start: ptr,
+                end: current,
+            }
+        });
     }
 
+}
+
+pub fn get_frame_allocator() -> &'static mut FrameAllocator {
+    unsafe { FRAME_ALLOCATOR.get().as_mut().unwrap().as_mut().unwrap() }
 }
