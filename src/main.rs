@@ -7,12 +7,14 @@ mod fb;
 mod requests;
 mod structures;
 
+use core::alloc::Layout;
 use core::fmt::Write;
 
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
 use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
+use crate::allocator::kernel_allocator::KernelAllocator;
 use crate::allocator::HHDM;
 use crate::fb::init_writer;
 use crate::structures::linked_list::AlignedNode;
@@ -24,26 +26,20 @@ extern "C" fn kmain() -> ! {
     init_writer();
     init_frame_allocator();
     
+    let mut allocator = KernelAllocator::init();
 
-
-    let frame = get_frame_allocator();
-    
     unsafe {
-        let page1 = frame.alloc_page();
-        let page2 = frame.alloc_page();
+        let a = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
+        let b = allocator.alloc(Layout::from_size_align(16, 8).unwrap());
+    
+    let mut c = allocator.start;
 
-        println!("Page 1 at {}", page1);
-        println!("Page 2 at {}", page2);
+    while c != core::ptr::null_mut() {
+        println!("{:?}", (*c));
 
-        frame.dealloc_page(page2 as *mut ());
-        println!("page 2 deallocated");
-
-        let page3 = frame.alloc_page();
-        
-        println!("Page 3 at {}", page3);
+        c = (*c).next_block;
     }
-
-
+    }
     loop {}
 }
 
