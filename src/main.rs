@@ -30,6 +30,7 @@ extern "C" fn kmain() -> ! {
 
     unsafe {
         let a = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
+        allocator.dealloc(a);
         let b = allocator.alloc(Layout::from_size_align(16, 8).unwrap());
     
     let mut c = allocator.start;

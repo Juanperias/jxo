@@ -1,5 +1,8 @@
 use core::alloc::{GlobalAlloc, Layout};
 
+use core::fmt::Write;
+use crate::println;
+
 use crate::allocator::frame_allocator::get_frame_allocator;
 
 #[derive(Debug)]
@@ -62,11 +65,34 @@ impl KernelAllocator {
 
             (*current).next_block = ptr;
         }
-    
+   
+        let pointer = self.pointer;
+
         self.pointer += size as u64;
      
-        (self.page + self.pointer) as *mut u8
+        (self.page + pointer + size_of::<Header>() as u64) as *mut u8
         }
+    }
+    pub unsafe fn dealloc(&mut self, block: *mut u8) {
+        unsafe {
+        if self.start == core::ptr::null_mut() {
+            return;
+        }
+
+        let mut current = self.start;
+
+        while current.addr() + size_of::<Header>() != block.addr() {
+            if (*current).next_block == core::ptr::null_mut() {
+                break;
+            }
+
+            current = (*current).next_block;
+            
+        }
+        (*current).free = true;
+
+        }
+
     }
 }
 
