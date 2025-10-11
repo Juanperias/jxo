@@ -1,7 +1,4 @@
-use core::alloc::{GlobalAlloc, Layout};
-
-use crate::println;
-use core::fmt::Write;
+use core::{alloc::{GlobalAlloc, Layout}, cell::SyncUnsafeCell, sync::atomic::{AtomicPtr, Ordering}};
 
 use crate::allocator::frame_allocator::get_frame_allocator;
 
@@ -12,11 +9,24 @@ pub struct Header {
     pub free: bool,
 }
 
+pub const MAX_ALLOCATION_SIZE: u64 = 4096;
+
+pub static KERNEL_ALLOCATOR: SyncUnsafeCell<Option<KernelAllocator>> = SyncUnsafeCell::new(None);
+
+pub fn init_kernel_allocator() {
+    unsafe {
+        *KERNEL_ALLOCATOR.get() = Some(KernelAllocator::init());
+    }
+}
+
+pub fn get_kernel_allocator() -> &'static mut KernelAllocator {
+    unsafe { KERNEL_ALLOCATOR.get().as_mut().unwrap().as_mut().unwrap() }
+}
+
+
 pub struct KernelAllocator {
     pub page: u64,
-    pub start: *mut Header,
-    pub allocations: u64,
-
+    pub start: AtomicPtr<Header>,
     pub pointer: u64,
 }
 
@@ -24,8 +34,7 @@ impl KernelAllocator {
     pub fn init() -> Self {
         Self {
             page: unsafe { get_frame_allocator().alloc_page() },
-            start: core::ptr::null_mut(),
-            allocations: 0,
+            start: AtomicPtr::new(core::ptr::null_mut()),
             pointer: 0,
         }
     }
@@ -37,8 +46,8 @@ impl KernelAllocator {
                 align_up(s, size_of::<usize>())
             };
 
-            if self.start != core::ptr::null_mut() {
-                let mut current = self.start;
+            if self.start.load(Ordering::SeqCst) != core::ptr::null_mut() {
+                let mut current = self.start.load(Ordering::SeqCst);
 
                 while !((*current).block_size == size && (*current).free) {
                     if (*current).next_block.is_null() {
@@ -65,14 +74,14 @@ impl KernelAllocator {
 
             (*ptr) = header;
 
-            if self.pointer > 4096 || (self.pointer + size as u64) > 4096 {
+            if self.pointer > MAX_ALLOCATION_SIZE || (self.pointer + size as u64) > MAX_ALLOCATION_SIZE {
                 return core::ptr::null_mut();
             }
 
-            if self.start.is_null() {
-                self.start = ptr;
+            if self.start.load(Ordering::SeqCst).is_null() {
+                self.start.store(ptr, Ordering::SeqCst);
             } else {
-                let mut current = self.start;
+                let mut current = self.start.load(Ordering::SeqCst);
 
                 loop {
                     if (*current).next_block == core::ptr::null_mut() {
@@ -88,18 +97,17 @@ impl KernelAllocator {
             let pointer = self.pointer;
 
             self.pointer += size as u64;
-            self.allocations += 1;
 
             (self.page + pointer + size_of::<Header>() as u64) as *mut u8
         }
     }
     pub unsafe fn dealloc(&mut self, block: *mut u8) {
         unsafe {
-            if self.start.is_null() {
+            if self.start.load(Ordering::SeqCst).is_null() {
                 return;
             }
 
-            let mut current = self.start;
+            let mut current = self.start.load(Ordering::SeqCst);
             let mut prev: *mut Header = core::ptr::null_mut();
 
             while current.addr() + core::mem::size_of::<Header>() != block.addr() {
@@ -110,11 +118,11 @@ impl KernelAllocator {
                 current = (*current).next_block;
             }
 
-            if current == self.start {
-                if !(*self.start).next_block.is_null() {
-                    self.start = (*self.start).next_block;
+            if current == self.start.load(Ordering::SeqCst) {
+                if !(*self.start.load(Ordering::SeqCst)).next_block.is_null() {
+                    self.start.store((*self.start.load(Ordering::SeqCst)).next_block, Ordering::SeqCst);
                 } else {
-                    self.start = core::ptr::null_mut();
+                    self.start.store(core::ptr::null_mut(), Ordering::SeqCst);
                 }
             } else {
                 if !prev.is_null() {
@@ -136,7 +144,13 @@ fn align_up(addr: usize, align: usize) -> usize {
 
 unsafe impl GlobalAlloc for KernelAllocatorWrapper {
     unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
-        core::ptr::null_mut()
+        unsafe {
+            get_kernel_allocator().alloc(layout) 
+        }
     }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {}
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: core::alloc::Layout) {
+        unsafe {
+            get_kernel_allocator().dealloc(ptr);
+        }
+    }
 }

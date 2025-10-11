@@ -13,34 +13,43 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
+use alloc::vec::Vec;
+
 use crate::allocator::HHDM;
 use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
-use crate::allocator::kernel_allocator::{Header, KernelAllocator};
+use crate::allocator::kernel_allocator::{get_kernel_allocator, init_kernel_allocator, Header, KernelAllocator, KernelAllocatorWrapper};
 use crate::fb::init_writer;
-use crate::structures::linked_list::AlignedNode;
+extern crate alloc;
+
+#[global_allocator]
+pub static GLOBAL_KERNEL_ALLOCATOR: KernelAllocatorWrapper = KernelAllocatorWrapper;
 
 #[unsafe(no_mangle)]
 extern "C" fn kmain() -> ! {
     HHDM.call_once(|| requests::HHDM_REQUEST.get_response().unwrap().offset());
 
     init_writer();
-    init_frame_allocator();
 
-    let mut allocator = KernelAllocator::init();
+    init_frame_allocator();
+    init_kernel_allocator();
+
+    let mut vector = Vec::new();
+
+    vector.push(2);
+    vector.push(90);
+    vector.push(20);
+
+    let mut vector2 = Vec::new();
+
+    vector2.push(20);
+    vector2.push(900);
+    vector2.push(200);
+    vector2.push(900);
+
+    println!("{:?} {:?}", vector, vector2);
 
     unsafe {
-        let a = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
-        allocator.dealloc(a);
-        let b = allocator.alloc(Layout::from_size_align(16, 8).unwrap());
-        let c = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
-        let d = allocator.alloc(Layout::from_size_align(20, 8).unwrap());
-
-        allocator.dealloc(d);
-
-        allocator.dealloc(b);
-        allocator.dealloc(c);
-
-        let mut c = allocator.start;
+        let mut c = get_kernel_allocator().start.load(Ordering::SeqCst);
 
         while c != core::ptr::null_mut() {
             println!("{:x} {:?}", c.addr() + size_of::<Header>(), (*c));
@@ -49,8 +58,8 @@ extern "C" fn kmain() -> ! {
         }
 
         println!(
-            "used memory {} {}",
-            allocator.pointer, allocator.allocations
+            "used memory {}",
+            get_kernel_allocator().pointer
         );
     }
     loop {}

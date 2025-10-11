@@ -16,7 +16,6 @@ use crate::{
 
 pub static FRAME_ALLOCATOR: SyncUnsafeCell<Option<FrameAllocator>> = SyncUnsafeCell::new(None);
 
-// use only last
 pub struct FrameAllocator {
     pub linked_list: LinkedList,
 }
