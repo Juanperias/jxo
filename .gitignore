@@ -2,4 +2,5 @@
 limine/
 kernel
 kernel.sym
-ovmf
+ovmf/
+*.iso
