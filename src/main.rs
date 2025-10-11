@@ -13,9 +13,9 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 
-use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
-use crate::allocator::kernel_allocator::KernelAllocator;
 use crate::allocator::HHDM;
+use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
+use crate::allocator::kernel_allocator::{Header, KernelAllocator};
 use crate::fb::init_writer;
 use crate::structures::linked_list::AlignedNode;
 
@@ -25,26 +25,39 @@ extern "C" fn kmain() -> ! {
 
     init_writer();
     init_frame_allocator();
-    
+
     let mut allocator = KernelAllocator::init();
 
     unsafe {
         let a = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
         allocator.dealloc(a);
         let b = allocator.alloc(Layout::from_size_align(16, 8).unwrap());
-    
-    let mut c = allocator.start;
+        let c = allocator.alloc(Layout::from_size_align(8, 8).unwrap());
+        let d = allocator.alloc(Layout::from_size_align(20, 8).unwrap());
 
-    while c != core::ptr::null_mut() {
-        println!("{:?}", (*c));
+        allocator.dealloc(d);
 
-        c = (*c).next_block;
-    }
+        allocator.dealloc(b);
+        allocator.dealloc(c);
+
+        let mut c = allocator.start;
+
+        while c != core::ptr::null_mut() {
+            println!("{:x} {:?}", c.addr() + size_of::<Header>(), (*c));
+
+            c = (*c).next_block;
+        }
+
+        println!(
+            "used memory {} {}",
+            allocator.pointer, allocator.allocations
+        );
     }
     loop {}
 }
 
 #[panic_handler]
-fn panic_handler(_info: &PanicInfo) -> ! {
+fn panic_handler(info: &PanicInfo) -> ! {
+    println!("Panic {}\n{:?}", info.message(), info.location());
     loop {}
 }
