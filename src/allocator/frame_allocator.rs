@@ -1,17 +1,12 @@
-use core::fmt::Write;
 use core::{
     cell::SyncUnsafeCell,
     sync::atomic::{AtomicPtr, AtomicU64, Ordering},
 };
-use x86_64::structures::paging::PageSize;
 
 use crate::{
-    allocator::HHDM,
-    println, requests,
-    structures::{
-        linked_list::{self, AlignedNode, LinkedList},
-        once::Once,
-    },
+    mem::HHDM,
+    requests,
+    structures::linked_list::{AlignedNode, LinkedList},
 };
 
 pub static FRAME_ALLOCATOR: SyncUnsafeCell<Option<FrameAllocator>> = SyncUnsafeCell::new(None);

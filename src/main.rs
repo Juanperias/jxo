@@ -2,6 +2,7 @@
 #![no_main]
 #![feature(sync_unsafe_cell, fn_traits)]
 
+mod mem;
 mod allocator;
 mod fb;
 mod requests;
@@ -12,9 +13,7 @@ use core::fmt::Write;
 use core::panic::PanicInfo;
 use core::sync::atomic:: Ordering;
 
-use alloc::vec::Vec;
-
-use crate::allocator::HHDM;
+use crate::mem::HHDM;
 use crate::allocator::frame_allocator::init_frame_allocator;
 use crate::allocator::kernel_allocator::{get_kernel_allocator, init_kernel_allocator, Header, KernelAllocatorWrapper};
 use crate::fb::init_writer;
@@ -40,7 +39,7 @@ extern "C" fn kmain() -> ! {
 
             c = (*c).next_block;
         }
-
+    
         println!(
             "used memory {}",
             get_kernel_allocator().pointer
