@@ -9,8 +9,6 @@ pub struct Header {
     pub free: bool,
 }
 
-pub const MAX_ALLOCATION_SIZE: u64 = 4096;
-
 pub static KERNEL_ALLOCATOR: SyncUnsafeCell<Option<KernelAllocator>> = SyncUnsafeCell::new(None);
 
 pub fn init_kernel_allocator() {
@@ -25,15 +23,20 @@ pub fn get_kernel_allocator() -> &'static mut KernelAllocator {
 
 
 pub struct KernelAllocator {
-    pub page: u64,
+    pub base: u64,
+    pub end: u64,
     pub start: AtomicPtr<Header>,
     pub pointer: u64,
 }
 
+// NOTE: this should be the first page allocation!!!
 impl KernelAllocator {
     pub fn init() -> Self {
+        let base_page = unsafe  { get_frame_allocator().alloc_page() };
+        let end_page = unsafe { get_frame_allocator().alloc_page() };
         Self {
-            page: unsafe { get_frame_allocator().alloc_page() },
+            base: base_page,
+            end: end_page + 4096,
             start: AtomicPtr::new(core::ptr::null_mut()),
             pointer: 0,
         }
@@ -63,6 +66,11 @@ impl KernelAllocator {
                     return (current.addr() as u64 + size_of::<Header>() as u64) as *mut u8;
                 }
             }
+            
+            if (self.pointer + size as u64) > self.end {
+                return core::ptr::null_mut();
+            }
+
 
             let header = Header {
                 block_size: size,
@@ -70,14 +78,11 @@ impl KernelAllocator {
                 free: false,
             };
 
-            let ptr = (self.page as *mut u8).add(self.pointer as usize) as *mut Header;
+            let ptr = (self.base as *mut u8).add(self.pointer as usize) as *mut Header;
 
             (*ptr) = header;
 
-            if self.pointer > MAX_ALLOCATION_SIZE || (self.pointer + size as u64) > MAX_ALLOCATION_SIZE {
-                return core::ptr::null_mut();
-            }
-
+          
             if self.start.load(Ordering::SeqCst).is_null() {
                 self.start.store(ptr, Ordering::SeqCst);
             } else {
@@ -98,7 +103,7 @@ impl KernelAllocator {
 
             self.pointer += size as u64;
 
-            (self.page + pointer + size_of::<Header>() as u64) as *mut u8
+            (self.base + pointer + size_of::<Header>() as u64) as *mut u8
         }
     }
     pub unsafe fn dealloc(&mut self, block: *mut u8) {

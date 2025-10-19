@@ -7,17 +7,16 @@ mod fb;
 mod requests;
 mod structures;
 
-use core::alloc::Layout;
 use core::fmt::Write;
 
 use core::panic::PanicInfo;
-use core::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
+use core::sync::atomic:: Ordering;
 
 use alloc::vec::Vec;
 
 use crate::allocator::HHDM;
-use crate::allocator::frame_allocator::{get_frame_allocator, init_frame_allocator};
-use crate::allocator::kernel_allocator::{get_kernel_allocator, init_kernel_allocator, Header, KernelAllocator, KernelAllocatorWrapper};
+use crate::allocator::frame_allocator::init_frame_allocator;
+use crate::allocator::kernel_allocator::{get_kernel_allocator, init_kernel_allocator, Header, KernelAllocatorWrapper};
 use crate::fb::init_writer;
 extern crate alloc;
 
@@ -32,21 +31,6 @@ extern "C" fn kmain() -> ! {
 
     init_frame_allocator();
     init_kernel_allocator();
-
-    let mut vector = Vec::new();
-
-    vector.push(2);
-    vector.push(90);
-    vector.push(20);
-
-    let mut vector2 = Vec::new();
-
-    vector2.push(20);
-    vector2.push(900);
-    vector2.push(200);
-    vector2.push(900);
-
-    println!("{:?} {:?}", vector, vector2);
 
     unsafe {
         let mut c = get_kernel_allocator().start.load(Ordering::SeqCst);
